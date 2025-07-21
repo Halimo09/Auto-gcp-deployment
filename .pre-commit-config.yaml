@@ -1,0 +1,17 @@
+repos:
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.72.0
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_validate
+      - id: terraform_tflint
+
+  - repo: https://github.com/adrienaury/pre-commit-hook
+    rev: v1.3.0
+    hooks:
+      - id: tflint
+
+  - repo: https://github.com/adrienaury/pre-commit-hook
+    rev: v1.3.0
+    hooks:
+      - id: yamllint

@@ -1,0 +1,12 @@
+project_id              = "my-gcp-project-466619"
+organization_id         = "818076630634"
+billing_account         = "0108F5-136A22-4B70BF"
+google_credentials_path = "/home/you/keys/tf-sa-key.json"
+region                  = "us-central1"
+zone                    = "us-central1-a"
+
+instance_names          = ["test-instance-1"]
+bucket_names            = ["test-bucket-1-466619"]
+database_instance_name  = "test-db-466619"
+cluster_name            = "test-gke-466619"
+initial_node_count      = 1

@@ -1,0 +1,89 @@
+name: Auto GCP Deploy (Controlled Destroy & Deploy)
+
+on:
+  push:
+    paths:
+      - 'configs/**/*.yaml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      GOOGLE_CREDENTIALS: ${{ secrets.GCP_SA_KEY }}
+      TF_IN_AUTOMATION: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.7.5
+
+      - name: Install Python dependencies
+        run: pip install pyyaml
+
+      - name: Authenticate with GCP
+        run: |
+          echo "$GOOGLE_CREDENTIALS" > $HOME/gcp-key.json
+          gcloud auth activate-service-account --key-file=$HOME/gcp-key.json
+          gcloud config set project my-gcp-project-466619
+
+      - name: Find newly pushed YAML file
+        id: find_yaml
+        run: |
+          CONFIG_FILE=$(find configs -type f -name '*.yaml' | sort | tail -n1)
+          echo "CONFIG_FILE=$CONFIG_FILE" >> $GITHUB_ENV
+          echo "NEW_CONFIG=$CONFIG_FILE" >> $GITHUB_OUTPUT
+
+      - name: Read previously deployed config (if any)
+        id: read_last
+        run: |
+          if [ -f .last_deployed_config ]; then
+            OLD_CONFIG=$(cat .last_deployed_config)
+            echo "OLD_CONFIG=$OLD_CONFIG" >> $GITHUB_ENV
+            echo "OLD_CONFIG=$OLD_CONFIG" >> $GITHUB_OUTPUT
+          else
+            echo "OLD_CONFIG=" >> $GITHUB_ENV
+            echo "OLD_CONFIG=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Destroy old infrastructure
+        if: env.OLD_CONFIG != ''
+        run: |
+          echo "Destroying old infra: $OLD_CONFIG"
+          python scripts/deploy.py "$OLD_CONFIG" -w default --destroy --auto-approve
+
+      - name: Notify Slack - Destroy
+        if: env.OLD_CONFIG != '' && success()
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"⚠️ *Destroyed Previous Infra*\nConfig: \`$OLD_CONFIG\`\"}" \
+            $SLACK_WEBHOOK_URL
+
+      - name: Deploy new infrastructure
+        run: |
+          echo "Deploying new infra: $CONFIG_FILE"
+          python scripts/deploy.py "$CONFIG_FILE" -w default --auto-approve
+
+      - name: Notify Slack - Deploy Success
+        if: success()
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"✅ *New Infra Deployed Successfully*\nConfig: \`$CONFIG_FILE\`\"}" \
+            $SLACK_WEBHOOK_URL
+
+      - name: Notify Slack - Failure
+        if: failure()
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"❌ *Deployment Failed*\nNew Config: \`$CONFIG_FILE\`\"}" \
+            $SLACK_WEBHOOK_URL
